@@ -3,9 +3,8 @@ import { FaMobileAlt, FaMemory, FaPalette, FaPercentage, FaUserTie, FaUser, FaMo
 import DatePicker, { DateObject } from "react-multi-date-picker";
 import persian from "react-date-object/calendars/persian";
 import persian_fa from "react-date-object/locales/persian_fa";
-// استایل‌ها را بر اساس نیاز خود انتخاب کنید
-import "react-multi-date-picker/styles/layouts/mobile.css"; // یا یک استایل دیگر
-import "react-multi-date-picker/styles/colors/purple.css"; // تم رنگی اختیاری
+import "react-multi-date-picker/styles/layouts/mobile.css";
+import "react-multi-date-picker/styles/colors/purple.css";
 
 // URL وب اپلیکیشن Google Apps Script خود را اینجا قرار دهید
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxjgcyO-P46Ur4rbLsSHKHYN4EQzpjAGT7VINRZiIRCSmLwPpLLzCrne7cQUTkQThOa/exec"; // URL صحیح را وارد کنید
@@ -18,18 +17,16 @@ const AddMobileForm: React.FC<AddMobileFormProps> = ({ onClose }) => {
   
   const getTodayPersian = () => new DateObject({ calendar: persian, locale: persian_fa });
 
-  // State برای فیلدهای متنی فرم
   const [formFields, setFormFields] = useState({
     model: '', ram: '', storage: '', color: '', imei: '',
     battery: '', buyer: '', seller: '', sellPrice: '', buyPrice: '',
   });
 
-  // State مجزا برای DatePickerها
   const [purchaseDate, setPurchaseDate] = useState<DateObject | null>(getTodayPersian());
   const [saleDate, setSaleDate] = useState<DateObject | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitMessage, setSubmitMessage] = useState<{ type: 'info' | 'error' | 'success'; text: string } | null>(null);
+  const [submitMessage, setSubmitMessage] = useState<{ type: 'info' | 'error'; text: string } | null>(null);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -41,64 +38,53 @@ const AddMobileForm: React.FC<AddMobileFormProps> = ({ onClose }) => {
     setIsSubmitting(true);
     setSubmitMessage(null);
 
-    // دریافت رشته تاریخ شمسی با فرمت "YYYY/MM/DD"
     const purchaseDateString = purchaseDate ? purchaseDate.format("YYYY/MM/DD") : "";
     const saleDateString = saleDate ? saleDate.format("YYYY/MM/DD") : "";
 
-    if (!formFields.model || !formFields.ram || !formFields.storage || !formFields.color || !formFields.imei || !formFields.seller || !formFields.buyPrice || !purchaseDateString) {
-        setSubmitMessage({ type: 'error', text: 'لطفاً تمام فیلدهای ستاره‌دار از جمله تاریخ خرید را پر کنید.' });
+    if (!formFields.model || !formFields.seller || !formFields.buyPrice || !purchaseDateString) {
+        setSubmitMessage({ type: 'error', text: 'لطفاً فیلدهای ستاره‌دار را کامل پر کنید.' });
         setIsSubmitting(false);
         return;
     }
 
     const payload = {
       action: 'registerMobileDeal',
-      ...formFields, // ارسال سایر فیلدهای فرم
-      buyPrice: formFields.buyPrice ? Number(formFields.buyPrice) : 0,
-      sellPrice: formFields.sellPrice ? Number(formFields.sellPrice) : 0,
-      purchaseDate: purchaseDateString, // ارسال رشته تاریخ شمسی
-      saleDate: saleDateString,         // ارسال رشته تاریخ شمسی
-      // recordTimestamp دیگر از کلاینت ارسال نمی‌شود، سرور آن را ایجاد می‌کند
+      ...formFields,
+      purchaseDate: purchaseDateString,
+      saleDate: saleDateString,
     };
 
-    console.log('داده ارسالی به Google Apps Script (حاوی رشته تاریخ شمسی):', JSON.stringify(payload));
+    console.log('Sending payload to GAS (with no-cors):', JSON.stringify(payload));
 
     try {
-      // برای ارسال JSON و خواندن پاسخ JSON، باید از mode: 'cors' استفاده شود
-      // و سرور Google Apps Script باید به درستی برای CORS پیکربندی شده باشد (با تابع doOptions و تنظیمات Deploy صحیح)
-      const response = await fetch(WEB_APP_URL, {
+      // استفاده از mode: 'no-cors'
+      // هشدار: در این حالت نمی‌توانیم پاسخ سرور را بخوانیم
+      await fetch(WEB_APP_URL, {
         method: 'POST',
-        mode: 'cors', 
+        mode: 'no-cors', // ✅ حالت no-cors فعال شد
+        // در حالت no-cors، هدر Content-Type ممکن است نادیده گرفته شود.
+        // اما بدنه همچنان ارسال می‌شود و GAS معمولاً می‌تواند رشته JSON را در e.postData.contents بخواند.
         headers: {
            'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
       
-      if (response.ok) {
-        const responseData = await response.json(); // انتظار پاسخ JSON از سرور
-        if (responseData.success) {
-            setSubmitMessage({ type: 'success', text: responseData.message || 'معامله گوشی با موفقیت ثبت شد.' });
-            // ریست کردن فرم
-            setFormFields({
-                model: '', ram: '', storage: '', color: '', imei: '',
-                battery: '', buyer: '', seller: '', sellPrice: '', buyPrice: '',
-            });
-            setPurchaseDate(getTodayPersian());
-            setSaleDate(null);
-        } else {
-            setSubmitMessage({ type: 'error', text: responseData.message || 'سرور یک خطا برگرداند.' });
-        }
-      } else {
-        // اگر response.ok نباشد (مثلاً خطای 4xx یا 5xx یا مشکل CORS حل نشده باشد)
-        const errorText = await response.text(); // سعی کنید متن خطا را بخوانید
-        console.error("HTTP Error:", response.status, errorText);
-        setSubmitMessage({ type: 'error', text: `خطا در ارتباط با سرور: ${response.status}. ${errorText}. لطفاً تنظیمات CORS و Deploy اسکریپت را بررسی کنید.` });
-      }
+      // چون نمی‌توانیم موفقیت را تأیید کنیم، یک پیام اطلاعاتی نمایش می‌دهیم
+      console.log('Request sent with no-cors. Server-side execution needs to be verified manually.');
+      setSubmitMessage({ type: 'info', text: 'درخواست ارسال شد. لطفاً گوگل شیت را برای اطمینان از ثبت بررسی کنید.' });
+      
+      // ریست کردن فرم با فرض ارسال موفق
+      setFormFields({
+          model: '', ram: '', storage: '', color: '', imei: '',
+          battery: '', buyer: '', seller: '', sellPrice: '', buyPrice: '',
+      });
+      setPurchaseDate(getTodayPersian());
+      setSaleDate(null);
 
-    } catch (error) { // این catch برای خطاهای شبکه یا اگر fetch به طور کامل شکست بخورد است
-      console.error('خطا در ارسال (Fetch Error):', error);
-      setSubmitMessage({ type: 'error', text: 'خطا در ارسال درخواست. کنسول و اتصال شبکه را بررسی کنید. مطمئن شوید مشکل CORS حل شده است.' });
+    } catch (error) { // این catch فقط خطاهای شبکه بسیار شدید را مدیریت می‌کند
+      console.error('Fetch Error with no-cors:', error);
+      setSubmitMessage({ type: 'error', text: 'خطا در ارسال اولیه درخواست. اتصال شبکه خود را بررسی کنید.' });
     } finally {
       setIsSubmitting(false);
     }
@@ -121,8 +107,7 @@ const AddMobileForm: React.FC<AddMobileFormProps> = ({ onClose }) => {
 
       {submitMessage && (
         <div className={`p-3 mb-4 rounded-md text-center text-sm ${
-          submitMessage.type === 'info' ? 'bg-blue-100 text-blue-700' : 
-          submitMessage.type === 'success' ? 'bg-green-100 text-green-700' :
+          submitMessage.type === 'info' ? 'bg-blue-100 text-blue-700' :
           submitMessage.type === 'error' ? 'bg-red-100 text-red-700' : ''
         }`}>
           {submitMessage.text}
@@ -139,7 +124,7 @@ const AddMobileForm: React.FC<AddMobileFormProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Purchase Date (Persian/Jalali) */}
+        {/* Purchase Date (Jalali) */}
         <div>
           <label htmlFor="purchaseDate" className={labelClass}>تاریخ خرید ما <span className="text-red-500">*</span></label>
           <div className={inputContainerClass + " cursor-pointer"}>
@@ -151,26 +136,19 @@ const AddMobileForm: React.FC<AddMobileFormProps> = ({ onClose }) => {
               locale={persian_fa}
               calendarPosition="bottom-right"
               containerClassName="w-full"
-              placeholder="تاریخ خرید را انتخاب کنید"
-              format="YYYY/MM/DD" // فرمت نمایش و دریافت تاریخ شمسی
+              format="YYYY/MM/DD"
               arrow={false}
-              render={(value, openCalendar, onChange) => ( // اضافه کردن onChange به render
+              render={(value, openCalendar) => (
                 <div className="flex items-center w-full" onClick={openCalendar}>
                     <FaCalendarAlt className="text-gray-400 ml-2" />
-                    <input 
-                        type="text" 
-                        readOnly 
-                        value={value} // مقدار فرمت شده تاریخ از DatePicker
-                        placeholder="تاریخ خرید" 
-                        className={datePickerInputRenderClass}
-                        // onChange={(e) => onChange(e.target.value)} // اگر می‌خواهید تایپ دستی را هم مدیریت کنید
-                    />
+                    <input type="text" readOnly value={value} placeholder="تاریخ خرید را انتخاب کنید" className={datePickerInputRenderClass} />
                 </div>
               )}
             />
           </div>
         </div>
         
+        {/* Other fields */}
         {/* Seller */}
         <div>
           <label htmlFor="seller" className={labelClass}>فروشنده به ما <span className="text-red-500">*</span></label>
@@ -191,10 +169,10 @@ const AddMobileForm: React.FC<AddMobileFormProps> = ({ onClose }) => {
 
         {/* RAM */}
         <div>
-          <label htmlFor="ram" className={labelClass}>رم <span className="text-red-500">*</span></label>
+          <label htmlFor="ram" className={labelClass}>رم</label>
           <div className={inputContainerClass}>
             <FaMemory className="text-gray-400 ml-2" />
-            <select id="ram" name="ram" value={formFields.ram} onChange={handleTextChange} className="flex-grow outline-none bg-transparent" required>
+            <select id="ram" name="ram" value={formFields.ram} onChange={handleTextChange} className="flex-grow outline-none bg-transparent">
               <option value="">انتخاب کنید...</option>
               <option value="2GB">2GB</option><option value="3GB">3GB</option><option value="4GB">4GB</option>
               <option value="6GB">6GB</option><option value="8GB">8GB</option><option value="12GB">12GB</option>
@@ -205,10 +183,10 @@ const AddMobileForm: React.FC<AddMobileFormProps> = ({ onClose }) => {
 
         {/* Storage */}
         <div>
-          <label htmlFor="storage" className={labelClass}>حافظه داخلی <span className="text-red-500">*</span></label>
+          <label htmlFor="storage" className={labelClass}>حافظه داخلی</label>
           <div className={inputContainerClass}>
             <FaMemory className="text-gray-400 ml-2" />
-            <select id="storage" name="storage" value={formFields.storage} onChange={handleTextChange} className="flex-grow outline-none bg-transparent" required>
+            <select id="storage" name="storage" value={formFields.storage} onChange={handleTextChange} className="flex-grow outline-none bg-transparent">
               <option value="">انتخاب کنید...</option>
               <option value="16GB">16GB</option><option value="32GB">32GB</option><option value="64GB">64GB</option>
               <option value="128GB">128GB</option><option value="256GB">256GB</option><option value="512GB">512GB</option>
@@ -226,7 +204,7 @@ const AddMobileForm: React.FC<AddMobileFormProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Sale Date (Persian/Jalali) */}
+        {/* Sale Date (Jalali) */}
         <div>
           <label htmlFor="saleDate" className={labelClass}>تاریخ فروش ما (اختیاری)</label>
            <div className={inputContainerClass + " cursor-pointer"}>
@@ -238,20 +216,12 @@ const AddMobileForm: React.FC<AddMobileFormProps> = ({ onClose }) => {
               locale={persian_fa}
               calendarPosition="bottom-right"
               containerClassName="w-full"
-              placeholder="تاریخ فروش را انتخاب کنید"
-              format="YYYY/MM/DD" // فرمت نمایش و دریافت تاریخ شمسی
+              format="YYYY/MM/DD"
               arrow={false}
-               render={(value, openCalendar, onChange) => ( // اضافه کردن onChange به render
+               render={(value, openCalendar) => (
                 <div className="flex items-center w-full" onClick={openCalendar}>
                     <FaCalendarAlt className="text-gray-400 ml-2" />
-                    <input 
-                        type="text" 
-                        readOnly 
-                        value={value} 
-                        placeholder="تاریخ فروش" 
-                        className={datePickerInputRenderClass}
-                        // onChange={(e) => onChange(e.target.value)} // اگر می‌خواهید تایپ دستی را هم مدیریت کنید
-                    />
+                    <input type="text" readOnly value={value} placeholder="تاریخ فروش را انتخاب کنید" className={datePickerInputRenderClass} />
                 </div>
               )}
             />
@@ -278,10 +248,10 @@ const AddMobileForm: React.FC<AddMobileFormProps> = ({ onClose }) => {
         
         {/* IMEI */}
         <div>
-          <label htmlFor="imei" className={labelClass}>شماره IMEI <span className="text-red-500">*</span></label>
+          <label htmlFor="imei" className={labelClass}>شماره IMEI</label>
           <div className={inputContainerClass}>
             <FaMobileAlt className="text-gray-400 ml-2" />
-            <input type="text" id="imei" name="imei" value={formFields.imei} onChange={handleTextChange} placeholder="IMEI را وارد کنید" className="flex-grow outline-none bg-transparent" required />
+            <input type="text" id="imei" name="imei" value={formFields.imei} onChange={handleTextChange} placeholder="IMEI را وارد کنید" className="flex-grow outline-none bg-transparent" />
           </div>
         </div>
 
